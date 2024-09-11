@@ -1,0 +1,6 @@
+version: "3.8"
+services:
+  health-probe:
+    build: .
+    ports:
+      - "9090:8080"
