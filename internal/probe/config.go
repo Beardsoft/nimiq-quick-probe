@@ -14,6 +14,7 @@ type Config struct {
 	RPCTimeout     time.Duration
 	CheckConsensus bool
 	CheckSync      bool
+	MaxBlockAge    time.Duration
 	MinPeers       int
 }
 
@@ -24,6 +25,7 @@ func LoadConfig() (Config, error) {
 		RPCTimeout:     5 * time.Second,
 		CheckConsensus: true,
 		CheckSync:      true,
+		MaxBlockAge:    15 * time.Second,
 		MinPeers:       1,
 	}
 
@@ -49,6 +51,17 @@ func LoadConfig() (Config, error) {
 			return Config{}, fmt.Errorf("CHECK_SYNC: %w", err)
 		}
 		cfg.CheckSync = v
+	}
+
+	if raw := os.Getenv("MAX_BLOCK_AGE"); raw != "" {
+		d, err := time.ParseDuration(raw)
+		if err != nil {
+			return Config{}, fmt.Errorf("MAX_BLOCK_AGE: %w", err)
+		}
+		if d < 0 {
+			return Config{}, fmt.Errorf("MAX_BLOCK_AGE: must be >= 0")
+		}
+		cfg.MaxBlockAge = d
 	}
 
 	if raw := os.Getenv("MIN_PEERS"); raw != "" {

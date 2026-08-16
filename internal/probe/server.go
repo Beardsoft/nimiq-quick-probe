@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"time"
 )
 
 func NewHandler(cfg Config, client NodeClient) http.Handler {
@@ -24,23 +25,33 @@ func NewHandler(cfg Config, client NodeClient) http.Handler {
 
 func run(ctx context.Context, cfg Config, client NodeClient) Report {
 	var (
-		sync    *SyncStatus
-		syncErr error
-		peers   int
-		peerErr error
+		consensus    *bool
+		consensusErr error
+		head         *Head
+		headErr      error
+		peers        int
+		peerErr      error
 	)
-	if cfg.CheckConsensus || cfg.CheckSync {
-		st, err := client.SyncStatus(ctx)
+	if cfg.CheckConsensus {
+		ok, err := client.ConsensusEstablished(ctx)
 		if err != nil {
-			syncErr = err
+			consensusErr = err
 		} else {
-			sync = &st
+			consensus = &ok
+		}
+	}
+	if cfg.CheckSync && cfg.MaxBlockAge > 0 {
+		h, err := client.LatestBlock(ctx)
+		if err != nil {
+			headErr = err
+		} else {
+			head = &h
 		}
 	}
 	if cfg.MinPeers > 0 {
 		peers, peerErr = client.PeerCount(ctx)
 	}
-	return Evaluate(cfg, sync, syncErr, peers, peerErr)
+	return Evaluate(cfg, time.Now(), consensus, consensusErr, head, headErr, peers, peerErr)
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {

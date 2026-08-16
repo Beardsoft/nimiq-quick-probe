@@ -1,13 +1,13 @@
 package probe
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
-type SyncStatus struct {
-	IsEstablished        bool   `json:"isEstablished"`
-	SyncedValidityWindow bool   `json:"syncedValidityWindow"`
-	CurrentBlock         uint64 `json:"currentBlock"`
-	RemainingBlocks      uint64 `json:"remainingBlocks"`
-	StateSyncProgress    uint64 `json:"stateSyncProgress"`
+type Head struct {
+	Number    uint64 `json:"number"`
+	Timestamp int64  `json:"timestamp"`
 }
 
 type CheckResult struct {
@@ -22,18 +22,18 @@ type Report struct {
 	Checks  []CheckResult `json:"checks"`
 }
 
-func Evaluate(cfg Config, sync *SyncStatus, syncErr error, peers int, peersErr error) Report {
+func Evaluate(cfg Config, now time.Time, consensus *bool, consensusErr error, head *Head, headErr error, peers int, peersErr error) Report {
 	var checks []CheckResult
 	healthy := true
 
 	if cfg.CheckConsensus {
 		c := CheckResult{Name: "consensus"}
 		switch {
-		case syncErr != nil:
-			c.Error = syncErr.Error()
-		case sync == nil:
-			c.Error = "missing sync status"
-		case !sync.IsEstablished:
+		case consensusErr != nil:
+			c.Error = consensusErr.Error()
+		case consensus == nil:
+			c.Error = "missing consensus status"
+		case !*consensus:
 			c.Detail = "consensus not established"
 		default:
 			c.Passed = true
@@ -45,18 +45,24 @@ func Evaluate(cfg Config, sync *SyncStatus, syncErr error, peers int, peersErr e
 		checks = append(checks, c)
 	}
 
-	if cfg.CheckSync {
-		c := CheckResult{Name: "sync"}
+	if cfg.CheckSync && cfg.MaxBlockAge > 0 {
+		c := CheckResult{Name: "head"}
 		switch {
-		case syncErr != nil:
-			c.Error = syncErr.Error()
-		case sync == nil:
-			c.Error = "missing sync status"
-		case sync.RemainingBlocks != 0 || sync.StateSyncProgress != 100:
-			c.Detail = fmt.Sprintf("remainingBlocks=%d stateSyncProgress=%d", sync.RemainingBlocks, sync.StateSyncProgress)
+		case headErr != nil:
+			c.Error = headErr.Error()
+		case head == nil:
+			c.Error = "missing latest block"
 		default:
-			c.Passed = true
-			c.Detail = fmt.Sprintf("block=%d", sync.CurrentBlock)
+			age := now.Sub(time.UnixMilli(head.Timestamp))
+			if age < 0 {
+				age = 0
+			}
+			if age > cfg.MaxBlockAge {
+				c.Detail = fmt.Sprintf("block=%d age=%s > %s", head.Number, age.Round(time.Millisecond), cfg.MaxBlockAge)
+			} else {
+				c.Passed = true
+				c.Detail = fmt.Sprintf("block=%d age=%s", head.Number, age.Round(time.Millisecond))
+			}
 		}
 		if !c.Passed {
 			healthy = false

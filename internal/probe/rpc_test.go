@@ -10,24 +10,46 @@ import (
 	"time"
 )
 
-func TestRPCClientSyncStatus(t *testing.T) {
+func TestRPCClientConsensusEstablished(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
-		if !strings.Contains(string(body), `"getSyncStatus"`) {
+		if !strings.Contains(string(body), `"isConsensusEstablished"`) {
 			t.Errorf("unexpected body %s", body)
 		}
-		w.Header().Set("Content-Type", "application/json")
-		io.WriteString(w, `{"jsonrpc":"2.0","id":1,"result":{"data":{"isEstablished":true,"syncedValidityWindow":true,"currentBlock":10,"remainingBlocks":0,"stateSyncProgress":100},"metadata":null}}`)
+		io.WriteString(w, `{"jsonrpc":"2.0","id":1,"result":{"data":true,"metadata":null}}`)
 	}))
 	defer srv.Close()
 
 	c := NewRPCClient(srv.URL, time.Second)
-	st, err := c.SyncStatus(context.Background())
+	ok, err := c.ConsensusEstablished(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !st.IsEstablished || st.CurrentBlock != 10 {
-		t.Fatalf("%+v", st)
+	if !ok {
+		t.Fatal("expected consensus")
+	}
+}
+
+func TestRPCClientLatestBlock(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		if !strings.Contains(string(body), `"getLatestBlock"`) {
+			t.Errorf("unexpected body %s", body)
+		}
+		if !strings.Contains(string(body), `"params":[false]`) {
+			t.Errorf("expected includeBody=false, got %s", body)
+		}
+		io.WriteString(w, `{"jsonrpc":"2.0","id":1,"result":{"data":{"number":8908524,"timestamp":1786912995245},"metadata":null}}`)
+	}))
+	defer srv.Close()
+
+	c := NewRPCClient(srv.URL, time.Second)
+	head, err := c.LatestBlock(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if head.Number != 8908524 || head.Timestamp != 1786912995245 {
+		t.Fatalf("%+v", head)
 	}
 }
 
@@ -66,7 +88,7 @@ func TestRPCClientHTTPError(t *testing.T) {
 	defer srv.Close()
 
 	c := NewRPCClient(srv.URL, time.Second)
-	if _, err := c.SyncStatus(context.Background()); err == nil {
+	if _, err := c.LatestBlock(context.Background()); err == nil {
 		t.Fatal("expected error")
 	}
 }

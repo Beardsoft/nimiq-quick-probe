@@ -7,17 +7,24 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 type fakeNode struct {
-	sync    SyncStatus
-	syncErr error
-	peers   int
-	peerErr error
+	consensus    bool
+	consensusErr error
+	head         Head
+	headErr      error
+	peers        int
+	peerErr      error
 }
 
-func (f fakeNode) SyncStatus(context.Context) (SyncStatus, error) {
-	return f.sync, f.syncErr
+func (f fakeNode) ConsensusEstablished(context.Context) (bool, error) {
+	return f.consensus, f.consensusErr
+}
+
+func (f fakeNode) LatestBlock(context.Context) (Head, error) {
+	return f.head, f.headErr
 }
 
 func (f fakeNode) PeerCount(context.Context) (int, error) {
@@ -25,9 +32,10 @@ func (f fakeNode) PeerCount(context.Context) (int, error) {
 }
 
 func TestHealthOK(t *testing.T) {
-	h := NewHandler(Config{CheckConsensus: true, CheckSync: true, MinPeers: 1}, fakeNode{
-		sync:  SyncStatus{IsEstablished: true, RemainingBlocks: 0, StateSyncProgress: 100, CurrentBlock: 9},
-		peers: 2,
+	h := NewHandler(Config{CheckConsensus: true, CheckSync: true, MaxBlockAge: 15 * time.Second, MinPeers: 1}, fakeNode{
+		consensus: true,
+		head:      Head{Number: 9, Timestamp: time.Now().UnixMilli()},
+		peers:     2,
 	})
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/health", nil))
@@ -38,7 +46,7 @@ func TestHealthOK(t *testing.T) {
 
 func TestHealthUnhealthy(t *testing.T) {
 	h := NewHandler(Config{CheckConsensus: true}, fakeNode{
-		sync: SyncStatus{IsEstablished: false},
+		consensus: false,
 	})
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/health", nil))
@@ -47,10 +55,21 @@ func TestHealthUnhealthy(t *testing.T) {
 	}
 }
 
+func TestHealthStaleHead(t *testing.T) {
+	h := NewHandler(Config{CheckSync: true, MaxBlockAge: 15 * time.Second}, fakeNode{
+		head: Head{Number: 9, Timestamp: time.Now().Add(-30 * time.Second).UnixMilli()},
+	})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/health", nil))
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.Bytes())
+	}
+}
+
 func TestStatusAlwaysOK(t *testing.T) {
 	h := NewHandler(Config{CheckConsensus: true, MinPeers: 1}, fakeNode{
-		syncErr: errors.New("dial tcp: connection refused"),
-		peerErr: errors.New("dial tcp: connection refused"),
+		consensusErr: errors.New("dial tcp: connection refused"),
+		peerErr:      errors.New("dial tcp: connection refused"),
 	})
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/status", nil))

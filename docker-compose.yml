@@ -9,6 +9,7 @@ services:
       RPC_TIMEOUT: 5s
       CHECK_CONSENSUS: "true"
       CHECK_SYNC: "true"
+      MAX_BLOCK_AGE: 15s
       MIN_PEERS: "1"
     extra_hosts:
       - "node:host-gateway"

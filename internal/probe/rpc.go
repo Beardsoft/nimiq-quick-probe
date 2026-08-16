@@ -11,7 +11,8 @@ import (
 )
 
 type NodeClient interface {
-	SyncStatus(ctx context.Context) (SyncStatus, error)
+	ConsensusEstablished(ctx context.Context) (bool, error)
+	LatestBlock(ctx context.Context) (Head, error)
 	PeerCount(ctx context.Context) (int, error)
 }
 
@@ -27,12 +28,22 @@ func NewRPCClient(url string, timeout time.Duration) *RPCClient {
 	}
 }
 
-func (c *RPCClient) SyncStatus(ctx context.Context) (SyncStatus, error) {
+func (c *RPCClient) ConsensusEstablished(ctx context.Context) (bool, error) {
 	var envelope struct {
-		Data SyncStatus `json:"data"`
+		Data bool `json:"data"`
 	}
-	if err := c.call(ctx, "getSyncStatus", &envelope); err != nil {
-		return SyncStatus{}, err
+	if err := c.call(ctx, "isConsensusEstablished", nil, &envelope); err != nil {
+		return false, err
+	}
+	return envelope.Data, nil
+}
+
+func (c *RPCClient) LatestBlock(ctx context.Context) (Head, error) {
+	var envelope struct {
+		Data Head `json:"data"`
+	}
+	if err := c.call(ctx, "getLatestBlock", []any{false}, &envelope); err != nil {
+		return Head{}, err
 	}
 	return envelope.Data, nil
 }
@@ -41,18 +52,21 @@ func (c *RPCClient) PeerCount(ctx context.Context) (int, error) {
 	var envelope struct {
 		Data int `json:"data"`
 	}
-	if err := c.call(ctx, "getPeerCount", &envelope); err != nil {
+	if err := c.call(ctx, "getPeerCount", nil, &envelope); err != nil {
 		return 0, err
 	}
 	return envelope.Data, nil
 }
 
-func (c *RPCClient) call(ctx context.Context, method string, result any) error {
+func (c *RPCClient) call(ctx context.Context, method string, params []any, result any) error {
+	if params == nil {
+		params = []any{}
+	}
 	reqBody, err := json.Marshal(map[string]any{
 		"jsonrpc": "2.0",
 		"id":      1,
 		"method":  method,
-		"params":  []any{},
+		"params":  params,
 	})
 	if err != nil {
 		return err

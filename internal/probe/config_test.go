@@ -11,6 +11,7 @@ func TestLoadConfigDefaults(t *testing.T) {
 	t.Setenv("RPC_TIMEOUT", "")
 	t.Setenv("CHECK_CONSENSUS", "")
 	t.Setenv("CHECK_SYNC", "")
+	t.Setenv("MAX_BLOCK_AGE", "")
 	t.Setenv("MIN_PEERS", "")
 
 	cfg, err := LoadConfig()
@@ -29,6 +30,9 @@ func TestLoadConfigDefaults(t *testing.T) {
 	if !cfg.CheckConsensus || !cfg.CheckSync {
 		t.Fatalf("expected consensus and sync enabled")
 	}
+	if cfg.MaxBlockAge != 15*time.Second {
+		t.Fatalf("MaxBlockAge = %s", cfg.MaxBlockAge)
+	}
 	if cfg.MinPeers != 1 {
 		t.Fatalf("MinPeers = %d", cfg.MinPeers)
 	}
@@ -40,6 +44,7 @@ func TestLoadConfigOverrides(t *testing.T) {
 	t.Setenv("RPC_TIMEOUT", "2s")
 	t.Setenv("CHECK_CONSENSUS", "false")
 	t.Setenv("CHECK_SYNC", "0")
+	t.Setenv("MAX_BLOCK_AGE", "30s")
 	t.Setenv("MIN_PEERS", "3")
 
 	cfg, err := LoadConfig()
@@ -58,6 +63,9 @@ func TestLoadConfigOverrides(t *testing.T) {
 	if cfg.CheckConsensus || cfg.CheckSync {
 		t.Fatalf("expected both checks disabled")
 	}
+	if cfg.MaxBlockAge != 30*time.Second {
+		t.Fatalf("MaxBlockAge = %s", cfg.MaxBlockAge)
+	}
 	if cfg.MinPeers != 3 {
 		t.Fatalf("MinPeers = %d", cfg.MinPeers)
 	}
@@ -65,6 +73,13 @@ func TestLoadConfigOverrides(t *testing.T) {
 
 func TestLoadConfigInvalidTimeout(t *testing.T) {
 	t.Setenv("RPC_TIMEOUT", "nope")
+	if _, err := LoadConfig(); err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestLoadConfigInvalidMaxBlockAge(t *testing.T) {
+	t.Setenv("MAX_BLOCK_AGE", "nope")
 	if _, err := LoadConfig(); err == nil {
 		t.Fatal("expected error")
 	}

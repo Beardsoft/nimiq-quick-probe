@@ -1,11 +1,16 @@
 package probe
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestEvaluateHealthy(t *testing.T) {
-	cfg := Config{CheckConsensus: true, CheckSync: true, MinPeers: 1}
-	sync := &SyncStatus{IsEstablished: true, RemainingBlocks: 0, StateSyncProgress: 100}
-	report := Evaluate(cfg, sync, nil, 4, nil)
+	now := time.UnixMilli(1_700_000_015_000)
+	cfg := Config{CheckConsensus: true, CheckSync: true, MaxBlockAge: 15 * time.Second, MinPeers: 1}
+	consensus := true
+	head := &Head{Number: 8908524, Timestamp: 1_700_000_014_000}
+	report := Evaluate(cfg, now, &consensus, nil, head, nil, 4, nil)
 	if !report.Healthy {
 		t.Fatalf("expected healthy, got %+v", report)
 	}
@@ -15,34 +20,51 @@ func TestEvaluateHealthy(t *testing.T) {
 }
 
 func TestEvaluateConsensusFail(t *testing.T) {
+	now := time.UnixMilli(1_700_000_000_000)
 	cfg := Config{CheckConsensus: true}
-	sync := &SyncStatus{IsEstablished: false, RemainingBlocks: 0, StateSyncProgress: 100}
-	report := Evaluate(cfg, sync, nil, 0, nil)
+	consensus := false
+	report := Evaluate(cfg, now, &consensus, nil, nil, nil, 0, nil)
 	if report.Healthy {
 		t.Fatal("expected unhealthy")
 	}
 }
 
-func TestEvaluateSyncFail(t *testing.T) {
-	cfg := Config{CheckSync: true}
-	sync := &SyncStatus{IsEstablished: true, RemainingBlocks: 12, StateSyncProgress: 40}
-	report := Evaluate(cfg, sync, nil, 0, nil)
+func TestEvaluateStaleHeadFail(t *testing.T) {
+	now := time.UnixMilli(1_700_000_030_000)
+	cfg := Config{CheckSync: true, MaxBlockAge: 15 * time.Second}
+	head := &Head{Number: 10, Timestamp: 1_700_000_000_000} // 30s old
+	report := Evaluate(cfg, now, nil, nil, head, nil, 0, nil)
 	if report.Healthy {
 		t.Fatal("expected unhealthy")
+	}
+	if report.Checks[0].Name != "head" || report.Checks[0].Passed {
+		t.Fatalf("%+v", report.Checks)
+	}
+}
+
+func TestEvaluateFreshHeadPass(t *testing.T) {
+	now := time.UnixMilli(1_700_000_005_000)
+	cfg := Config{CheckSync: true, MaxBlockAge: 15 * time.Second}
+	head := &Head{Number: 10, Timestamp: 1_700_000_004_000} // 1s old
+	report := Evaluate(cfg, now, nil, nil, head, nil, 0, nil)
+	if !report.Healthy {
+		t.Fatalf("expected healthy, got %+v", report)
 	}
 }
 
 func TestEvaluatePeersFail(t *testing.T) {
+	now := time.UnixMilli(1_700_000_000_000)
 	cfg := Config{MinPeers: 3}
-	report := Evaluate(cfg, nil, nil, 1, nil)
+	report := Evaluate(cfg, now, nil, nil, nil, nil, 1, nil)
 	if report.Healthy {
 		t.Fatal("expected unhealthy")
 	}
 }
 
 func TestEvaluateDisabledChecksSkipped(t *testing.T) {
-	cfg := Config{CheckConsensus: false, CheckSync: false, MinPeers: 0}
-	report := Evaluate(cfg, nil, nil, 0, nil)
+	now := time.UnixMilli(1_700_000_000_000)
+	cfg := Config{CheckConsensus: false, CheckSync: false, MaxBlockAge: 0, MinPeers: 0}
+	report := Evaluate(cfg, now, nil, nil, nil, nil, 0, nil)
 	if !report.Healthy {
 		t.Fatal("expected healthy when no checks enabled")
 	}
@@ -52,8 +74,9 @@ func TestEvaluateDisabledChecksSkipped(t *testing.T) {
 }
 
 func TestEvaluateRPCErrorFailsEnabledChecks(t *testing.T) {
-	cfg := Config{CheckConsensus: true, CheckSync: true, MinPeers: 1}
-	report := Evaluate(cfg, nil, errTest, 0, errTest)
+	now := time.UnixMilli(1_700_000_000_000)
+	cfg := Config{CheckConsensus: true, CheckSync: true, MaxBlockAge: 15 * time.Second, MinPeers: 1}
+	report := Evaluate(cfg, now, nil, errTest, nil, errTest, 0, errTest)
 	if report.Healthy {
 		t.Fatal("expected unhealthy")
 	}

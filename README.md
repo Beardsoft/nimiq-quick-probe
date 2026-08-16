@@ -9,8 +9,8 @@ Sidecar that tells HAProxy whether a Nimiq node should stay in rotation.
 
 | Check | RPC | Pass when |
 |---|---|---|
-| Consensus | `getSyncStatus` | `isEstablished` |
-| Sync | `getSyncStatus` | `remainingBlocks == 0` and `stateSyncProgress == 100` |
+| Consensus | `isConsensusEstablished` | `true` |
+| Head age | `getLatestBlock` | head timestamp newer than `MAX_BLOCK_AGE` |
 | Peers | `getPeerCount` | `>= MIN_PEERS` |
 
 ## Configuration
@@ -21,7 +21,8 @@ Sidecar that tells HAProxy whether a Nimiq node should stay in rotation.
 | `LISTEN_ADDR` | `:8080` | Probe bind address |
 | `RPC_TIMEOUT` | `5s` | Per-request timeout |
 | `CHECK_CONSENSUS` | `true` | Require consensus |
-| `CHECK_SYNC` | `true` | Require fully synced |
+| `CHECK_SYNC` | `true` | Require a fresh head |
+| `MAX_BLOCK_AGE` | `15s` | Fail if the latest block is older than this; `0` disables |
 | `MIN_PEERS` | `1` | Minimum peers; `0` disables the peer check |
 
 ## Docker
