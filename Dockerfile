@@ -1,23 +1,12 @@
-# Start from the official Golang image
-FROM golang:1.22-alpine
-
-# Set the Current Working Directory inside the container
-WORKDIR /app
-
-# Copy go.mod and go.sum files
+FROM golang:1.26-alpine AS build
+WORKDIR /src
 COPY go.mod go.sum ./
-
-# Download all dependencies
 RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /health-probe ./cmd
 
-# Copy the source code from the current directory to the Working Directory inside the container
-COPY ./cmd ./cmd
-
-# Build the Go app, specifying the location of the main.go file
-RUN go build -o /health-probe ./cmd
-
-# Expose port 8080 to the outside world
+FROM gcr.io/distroless/static-debian12:nonroot
+COPY --from=build /health-probe /health-probe
 EXPOSE 8080
-
-# Command to run the executable
-CMD ["/health-probe"]
+USER nonroot
+ENTRYPOINT ["/health-probe"]

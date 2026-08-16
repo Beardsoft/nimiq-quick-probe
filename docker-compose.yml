@@ -1,6 +1,14 @@
-version: "3.8"
 services:
   health-probe:
     build: .
     ports:
       - "9090:8080"
+    environment:
+      NIMIQ_RPC_URL: http://node:8648
+      LISTEN_ADDR: ":8080"
+      RPC_TIMEOUT: 5s
+      CHECK_CONSENSUS: "true"
+      CHECK_SYNC: "true"
+      MIN_PEERS: "1"
+    extra_hosts:
+      - "node:host-gateway"
